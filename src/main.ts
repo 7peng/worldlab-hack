@@ -54,11 +54,42 @@ async function fetchPastPrompts() {
     for (const p of prompts) {
       const li = document.createElement("li");
       li.className = "past-prompt-item";
-      li.innerHTML = `<span class="past-prompt-text">${escapeHtml(p.prompt)}</span><span class="chunk-count">${p.chunk_count} chunk${p.chunk_count !== 1 ? "s" : ""}</span>`;
-      li.addEventListener("click", () => {
+
+      const textSpan = document.createElement("span");
+      textSpan.className = "past-prompt-text";
+      textSpan.textContent = p.prompt;
+      textSpan.style.cursor = "pointer";
+      textSpan.addEventListener("click", () => {
         (document.getElementById("prompt-input") as HTMLInputElement).value = p.prompt;
         start(p.prompt);
       });
+
+      const countSpan = document.createElement("span");
+      countSpan.className = "chunk-count";
+      countSpan.textContent = `${p.chunk_count} chunk${p.chunk_count !== 1 ? "s" : ""}`;
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "past-prompt-delete";
+      deleteBtn.textContent = "✕";
+      deleteBtn.title = "Delete cached chunks for this prompt";
+      deleteBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete all cached chunks for:\n"${p.prompt}"?`)) return;
+        try {
+          await fetch("/api/chunks/reset", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt: p.prompt }),
+          });
+          fetchPastPrompts();
+        } catch (err) {
+          console.error("Failed to clear cache:", err);
+        }
+      });
+
+      li.appendChild(textSpan);
+      li.appendChild(countSpan);
+      li.appendChild(deleteBtn);
       list.appendChild(li);
     }
     container.classList.remove("hidden");

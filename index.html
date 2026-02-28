@@ -79,7 +79,13 @@
       }
       .past-prompt-item:hover { background: rgba(255,255,255,0.1); border-color: #444; color: #fff; }
       .past-prompt-item .chunk-count { color: #666; font-size: 0.7rem; flex-shrink: 0; margin-left: 12px; }
-      .past-prompt-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .past-prompt-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+      .past-prompt-delete {
+        background: none; border: none; color: #555; cursor: pointer;
+        font-size: 0.75rem; padding: 2px 8px; margin-left: 8px; border-radius: 4px;
+        flex-shrink: 0; transition: all 0.15s;
+      }
+      .past-prompt-delete:hover { color: #ff4444; background: rgba(255,68,68,0.15); }
       #past-prompts.hidden { display: none; }
 
       /* HUD */
