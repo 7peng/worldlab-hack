@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Infinite Worlds</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: system-ui, -apple-system, sans-serif; }
+
+      #canvas3d {
+        width: 100%; height: 100%;
+        display: block;
+        position: absolute; top: 0; left: 0;
+      }
+
+      /* Crosshair */
+      #crosshair {
+        position: fixed; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none; z-index: 10;
+        width: 24px; height: 24px;
+      }
+      #crosshair::before, #crosshair::after {
+        content: ''; position: absolute; background: rgba(255,255,255,0.7);
+      }
+      #crosshair::before { width: 2px; height: 24px; left: 11px; top: 0; }
+      #crosshair::after  { width: 24px; height: 2px; top: 11px; left: 0; }
+
+      /* Overlay (loading / context lost / prompt entry) */
+      #overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85); z-index: 100;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        color: #fff; gap: 20px;
+        transition: opacity 0.3s;
+      }
+      #overlay.hidden { opacity: 0; pointer-events: none; }
+      #overlay h1 { font-size: 2rem; font-weight: 300; letter-spacing: 0.05em; }
+      #overlay p  { font-size: 0.9rem; color: #aaa; max-width: 500px; text-align: center; }
+
+      #prompt-input {
+        width: 400px; max-width: 90vw; padding: 12px 16px;
+        font-size: 1rem; border: 1px solid #444; border-radius: 8px;
+        background: #111; color: #fff; outline: none;
+      }
+      #prompt-input:focus { border-color: #666; }
+      #prompt-input::placeholder { color: #555; }
+
+      #start-btn {
+        padding: 10px 32px; font-size: 1rem;
+        border: none; border-radius: 8px; cursor: pointer;
+        background: #fff; color: #000; font-weight: 600;
+        transition: background 0.15s;
+      }
+      #start-btn:hover { background: #ddd; }
+
+      /* Past prompts */
+      #past-prompts {
+        width: 400px; max-width: 90vw; margin-top: 8px;
+      }
+      #past-prompts h2 {
+        font-size: 0.75rem; font-weight: 400; color: #666;
+        text-transform: uppercase; letter-spacing: 0.1em;
+        margin-bottom: 8px;
+      }
+      #past-prompts-list {
+        list-style: none; display: flex; flex-direction: column; gap: 4px;
+        max-height: 180px; overflow-y: auto;
+      }
+      #past-prompts-list::-webkit-scrollbar { width: 4px; }
+      #past-prompts-list::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+      .past-prompt-item {
+        padding: 8px 12px; border-radius: 6px; cursor: pointer;
+        background: rgba(255,255,255,0.05); border: 1px solid #222;
+        color: #ccc; font-size: 0.85rem; transition: all 0.15s;
+        display: flex; justify-content: space-between; align-items: center;
+      }
+      .past-prompt-item:hover { background: rgba(255,255,255,0.1); border-color: #444; color: #fff; }
+      .past-prompt-item .chunk-count { color: #666; font-size: 0.7rem; flex-shrink: 0; margin-left: 12px; }
+      .past-prompt-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #past-prompts.hidden { display: none; }
+
+      /* HUD */
+      #hud {
+        position: fixed; bottom: 16px; left: 16px;
+        color: rgba(255,255,255,0.6); font-size: 0.75rem;
+        pointer-events: none; z-index: 10;
+        font-family: 'Consolas', 'SF Mono', monospace;
+        line-height: 1.6;
+      }
+
+      /* Loading status */
+      #chunk-status {
+        position: fixed; top: 16px; right: 16px;
+        color: rgba(255,255,255,0.5); font-size: 0.7rem;
+        pointer-events: none; z-index: 10;
+        font-family: 'Consolas', 'SF Mono', monospace;
+        text-align: right; line-height: 1.5;
+      }
+
+      /* Click to fly instruction */
+      #click-hint {
+        position: fixed; top: 50%; left: 50%;
+        transform: translate(-50%, 30px);
+        color: rgba(255,255,255,0.4); font-size: 0.8rem;
+        pointer-events: none; z-index: 10;
+        transition: opacity 0.3s;
+      }
+      #click-hint.hidden { opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas3d"></canvas>
+    <div id="crosshair" class="hidden"></div>
+    <div id="click-hint" class="hidden">Click to enter fly mode</div>
+
+    <div id="overlay">
+      <h1>Infinite Worlds</h1>
+      <p>Enter a prompt to generate your starting world. You'll fly through an infinite landscape of AI-generated Gaussian splat environments.</p>
+      <input id="prompt-input" type="text" placeholder="A mystical forest with glowing mushrooms..." autofocus />
+      <button id="start-btn">Generate &amp; Explore</button>
+      <div id="past-prompts" class="hidden">
+        <h2>Past Worlds</h2>
+        <ul id="past-prompts-list"></ul>
+      </div>
+    </div>
+
+    <div id="hud"></div>
+    <div id="chunk-status"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

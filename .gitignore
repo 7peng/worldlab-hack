@@ -1,0 +1,7 @@
+node_modules/
+dist/
+chunks/*.spz
+data/*.db
+data/*.json
+.env
+*.log
