@@ -2,6 +2,7 @@ import { createScene, setupContextRecovery, type SceneContext } from "./renderer
 import { createSpark } from "./renderer/SparkSetup";
 import { FlyController } from "./controls/FlyController";
 import { ChunkManager } from "./world/ChunkManager";
+import { CHUNK_SIZE } from "./utils/constants";
 import type { SparkRenderer } from "@sparkjsdev/spark";
 
 // ---------------------------------------------------------------------------
@@ -54,11 +55,33 @@ async function fetchPastPrompts() {
     for (const p of prompts) {
       const li = document.createElement("li");
       li.className = "past-prompt-item";
-      li.innerHTML = `<span class="past-prompt-text">${escapeHtml(p.prompt)}</span><span class="chunk-count">${p.chunk_count} chunk${p.chunk_count !== 1 ? "s" : ""}</span>`;
+      li.innerHTML = `<span class="past-prompt-text">${escapeHtml(p.prompt)}</span><span style="display:flex;align-items:center"><span class="chunk-count">${p.chunk_count} chunk${p.chunk_count !== 1 ? "s" : ""}</span><button class="delete-btn">Delete</button></span>`;
       li.addEventListener("click", () => {
         (document.getElementById("prompt-input") as HTMLInputElement).value = p.prompt;
         start(p.prompt);
       });
+
+      // Delete handler
+      const delBtn = li.querySelector(".delete-btn") as HTMLButtonElement | null;
+      if (delBtn) {
+        delBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!confirm(`Delete world and all chunks for:\n\n${p.prompt}\n\nThis cannot be undone.`)) return;
+          try {
+            await fetch("/api/chunks/reset", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ prompt: p.prompt }),
+            });
+            // Refresh the list
+            fetchPastPrompts();
+          } catch (err) {
+            console.error("Failed to delete prompt:", err);
+            alert("Failed to delete world. See console for details.");
+          }
+        });
+      }
+
       list.appendChild(li);
     }
     container.classList.remove("hidden");
@@ -129,9 +152,37 @@ function updateMinimap() {
     minimapCtx.fillRect(sx + 1, sy + 1, cell - 2, cell - 2);
   }
 
-  // Draw player marker (red center)
+  // Draw continuous player marker (red dot) according to fractional world position
+  const playerPos = controller.camera.position;
+  const pxWorld = playerPos.x;
+  const pzWorld = playerPos.z;
+  const playerChunkX = playerChunk.x * CHUNK_SIZE;
+  const playerChunkZ = playerChunk.y * CHUNK_SIZE;
+
+  // Fractional offset from the center chunk in chunk-space (-0.5..0.5)
+  const fracX = (pxWorld - playerChunkX) / CHUNK_SIZE;
+  const fracY = (pzWorld - playerChunkZ) / CHUNK_SIZE; // note: z maps to vertical on minimap
+
+  const dotX = centerX * cell + (0.5 + fracX) * cell - cell * 0.5;
+  const dotY = centerY * cell + (0.5 + fracY) * cell - cell * 0.5;
+
   minimapCtx.fillStyle = "#ff4444";
-  minimapCtx.fillRect(centerX * cell + cell * 0.25, centerY * cell + cell * 0.25, cell * 0.5, cell * 0.5);
+  const dotR = Math.max(2, cell * 0.12);
+  minimapCtx.beginPath();
+  minimapCtx.arc(dotX + cell * 0.5, dotY + cell * 0.5, dotR, 0, Math.PI * 2);
+  minimapCtx.fill();
+
+  // Draw view direction line from the continuous dot
+  const fwd = controller.getForwardXZ();
+  const len = cell * 0.6;
+  const sx = fwd.x * len;
+  const sy = -fwd.z * len;
+  minimapCtx.strokeStyle = "#ff4444";
+  minimapCtx.lineWidth = 2;
+  minimapCtx.beginPath();
+  minimapCtx.moveTo(dotX + cell * 0.5, dotY + cell * 0.5);
+  minimapCtx.lineTo(dotX + cell * 0.5 + sx, dotY + cell * 0.5 + sy);
+  minimapCtx.stroke();
 
   // Draw border
   minimapCtx.strokeStyle = "rgba(255,255,255,0.06)";

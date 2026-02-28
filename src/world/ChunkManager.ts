@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { SplatMesh } from "@sparkjsdev/spark";
-import { CHUNK_SIZE, ZONE_ACTIVE, ZONE_CACHED, MAX_PENDING_LOADS } from "../utils/constants";
+import { CHUNK_SIZE, ZONE_ACTIVE, ZONE_CACHED, MAX_PENDING_LOADS, PRELOAD_RADIUS } from "../utils/constants";
 import { loadChunk, chunkKey, BillingError, type ChunkState } from "./ChunkLoader";
 import { PredictiveFetcher } from "./PredictiveFetcher";
 import type { FlyController } from "../controls/FlyController";
@@ -53,6 +53,16 @@ export class ChunkManager {
     this.fetcher = new PredictiveFetcher();
   }
 
+  /** Preload a square grid of chunks centered on the player's current chunk. */
+  preloadGrid(controller: any, radius = 1) {
+    const { x: cx, y: cy } = controller.getChunkCoords();
+    for (let dx = -radius; dx <= radius; dx++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        this.requestChunk(cx + dx, cy + dy);
+      }
+    }
+  }
+
   /** Chebyshev (chessboard) distance between two chunk coords. */
   private dist(ax: number, ay: number, bx: number, by: number): number {
     return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
@@ -72,9 +82,10 @@ export class ChunkManager {
     this.requestChunk(cx, cy);
 
     // 2. Only expand to neighbors once at least one chunk is loaded
+    // Use PRELOAD_RADIUS to control how many chunks to spawn/preload around the player.
     if (this.chunks.size > 0) {
-      for (let dx = -ZONE_ACTIVE; dx <= ZONE_ACTIVE; dx++) {
-        for (let dy = -ZONE_ACTIVE; dy <= ZONE_ACTIVE; dy++) {
+      for (let dx = -PRELOAD_RADIUS; dx <= PRELOAD_RADIUS; dx++) {
+        for (let dy = -PRELOAD_RADIUS; dy <= PRELOAD_RADIUS; dy++) {
           if (dx === 0 && dy === 0) continue;
           this.requestChunk(cx + dx, cy + dy);
         }
@@ -141,6 +152,11 @@ export class ChunkManager {
     }
   }
 
+  /**
+   * Request a chunk. If `opts.forceParallel` is true this will bypass the
+   * usual MAX_PENDING_LOADS throttle so multiple chunks (eg. a 3x3 preload)
+   * can be loaded in parallel for a fast startup.
+   */
   private requestChunk(x: number, y: number) {
     if (this.billingHalted) return;
 

@@ -1,6 +1,6 @@
 import { SplatMesh } from "@sparkjsdev/spark";
 import * as THREE from "three";
-import { CHUNK_SIZE, CLIENT_POLL_INTERVAL_MS } from "../utils/constants";
+import { CHUNK_SIZE, CLIENT_POLL_INTERVAL_MS, CHUNK_OVERLAP_FACTOR } from "../utils/constants";
 
 export interface ChunkState {
   x: number;
@@ -111,11 +111,9 @@ export async function loadChunk(
   // World Labs splats are Y-flipped relative to Three.js
   splatMesh.scale.set(1, -1, 1);
 
-  // Apply a small X/Z overlap so adjacent chunks slightly blend together
-  // (helps hide seams when moving across chunk borders).
-  const OVERLAP_FACTOR = 1.02;
-  splatMesh.scale.x *= OVERLAP_FACTOR;
-  splatMesh.scale.z *= OVERLAP_FACTOR;
+  // Apply overlap so adjacent chunks blend together (50% by default).
+  splatMesh.scale.x *= CHUNK_OVERLAP_FACTOR;
+  splatMesh.scale.z *= CHUNK_OVERLAP_FACTOR;
 
   // Prevent frustum culling glitches at borders
   (splatMesh as any).frustumCulled = false;
@@ -140,6 +138,47 @@ export async function loadChunk(
 
   splatMesh.position.set(x * CHUNK_SIZE, 0, y * CHUNK_SIZE);
   scene.add(splatMesh);
+
+  // Inject an edge fading mask into each material to blend chunk borders.
+  // CHUNK_HALF is half the scaled chunk extent; FADE_WIDTH controls the blending band.
+  const CHUNK_HALF = CHUNK_SIZE * CHUNK_OVERLAP_FACTOR * 0.5;
+  const FADE_WIDTH = Math.max(0.25, CHUNK_SIZE * 0.5);
+
+  splatMesh.traverse((child: any) => {
+    if (!(child?.isMesh && child.material)) return;
+    const mat: any = child.material;
+    if (mat.userData && mat.userData._edgeFadePatched) return;
+
+    // Ensure material is prepared for transparency
+    mat.transparent = true;
+    mat.depthWrite = false;
+
+    // Patch shader to include world-space position and edge fade
+    mat.onBeforeCompile = (shader: any) => {
+      shader.uniforms.chunkOrigin = { value: new THREE.Vector3(x * CHUNK_SIZE, 0, y * CHUNK_SIZE) };
+      shader.uniforms.chunkHalf = { value: CHUNK_HALF };
+      shader.uniforms.fadeWidth = { value: FADE_WIDTH };
+
+      // Add varying for world position
+      shader.vertexShader = 'varying vec3 vWorldPos;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace(
+        'gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );',
+        'vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;\n\tgl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );'
+      );
+
+      // Inject uniforms and varying into fragment shader
+      shader.fragmentShader = 'varying vec3 vWorldPos;\nuniform vec3 chunkOrigin;\nuniform float chunkHalf;\nuniform float fadeWidth;\n' + shader.fragmentShader;
+
+      // Multiply final alpha by edge fade before writing out gl_FragColor
+      shader.fragmentShader = shader.fragmentShader.replace(
+        'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+        '\n  {\n    vec3 localPos = vWorldPos - chunkOrigin;\n    float edgeX = chunkHalf - abs(localPos.x);\n    float edgeZ = chunkHalf - abs(localPos.z);\n    float edgeDist = min(edgeX, edgeZ);\n    float fade = clamp(edgeDist / fadeWidth, 0.0, 1.0);\n    gl_FragColor = vec4( outgoingLight, diffuseColor.a * fade );\n  }'
+      );
+    };
+
+    mat.userData._edgeFadePatched = true;
+    mat.needsUpdate = true;
+  });
 
   return {
     x,

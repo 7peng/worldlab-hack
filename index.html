@@ -77,6 +77,12 @@
         color: #ccc; font-size: 0.85rem; transition: all 0.15s;
         display: flex; justify-content: space-between; align-items: center;
       }
+        .past-prompt-item .delete-btn {
+          background: transparent; border: 1px solid rgba(255,255,255,0.06);
+          color: #ff7777; padding: 4px 8px; border-radius: 6px; cursor: pointer;
+          font-size: 0.75rem; margin-left: 8px;
+        }
+        .past-prompt-item .delete-btn:hover { background: rgba(255,0,0,0.06); }
       .past-prompt-item:hover { background: rgba(255,255,255,0.1); border-color: #444; color: #fff; }
       .past-prompt-item .chunk-count { color: #666; font-size: 0.7rem; flex-shrink: 0; margin-left: 12px; }
       .past-prompt-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
