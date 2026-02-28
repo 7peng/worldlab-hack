@@ -91,6 +91,13 @@
         line-height: 1.6;
       }
 
+      /* Minimap (bottom-right) */
+      #minimap {
+        position: fixed; right: 16px; bottom: 16px;
+        width: 160px; height: 160px; background: #000; z-index: 11;
+        border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; pointer-events: none;
+      }
+
       /* Loading status */
       #chunk-status {
         position: fixed; top: 16px; right: 16px;
@@ -129,6 +136,7 @@
 
     <div id="hud"></div>
     <div id="chunk-status"></div>
+    <canvas id="minimap"></canvas>
 
     <script type="module" src="/src/main.ts"></script>
   </body>

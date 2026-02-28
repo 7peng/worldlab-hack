@@ -110,6 +110,34 @@ export async function loadChunk(
 
   // World Labs splats are Y-flipped relative to Three.js
   splatMesh.scale.set(1, -1, 1);
+
+  // Apply a small X/Z overlap so adjacent chunks slightly blend together
+  // (helps hide seams when moving across chunk borders).
+  const OVERLAP_FACTOR = 1.02;
+  splatMesh.scale.x *= OVERLAP_FACTOR;
+  splatMesh.scale.z *= OVERLAP_FACTOR;
+
+  // Prevent frustum culling glitches at borders
+  (splatMesh as any).frustumCulled = false;
+
+  // Tweak underlying materials/textures to clamp edges and enable blending
+  splatMesh.traverse((child: any) => {
+    if (child?.isMesh && child.material) {
+      const mat: any = child.material;
+      mat.transparent = true;
+      mat.side = THREE.DoubleSide;
+      mat.depthWrite = false;
+      if (mat.map) {
+        mat.map.wrapS = THREE.ClampToEdgeWrapping;
+        mat.map.wrapT = THREE.ClampToEdgeWrapping;
+        mat.map.minFilter = THREE.LinearMipMapLinearFilter;
+        mat.map.magFilter = THREE.LinearFilter;
+        mat.map.needsUpdate = true;
+      }
+      mat.needsUpdate = true;
+    }
+  });
+
   splatMesh.position.set(x * CHUNK_SIZE, 0, y * CHUNK_SIZE);
   scene.add(splatMesh);
 

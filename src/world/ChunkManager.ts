@@ -45,6 +45,7 @@ export class ChunkManager {
   private prompt: string;
   private fetcher: PredictiveFetcher;
   private billingHalted = false;
+  private lastUpdateTime = performance.now() / 1000;
 
   constructor(scene: THREE.Scene, prompt: string) {
     this.scene = scene;
@@ -61,6 +62,10 @@ export class ChunkManager {
    * Main update — call every frame.
    */
   update(controller: FlyController) {
+    const t = performance.now() / 1000;
+    const dt = Math.min(0.1, t - this.lastUpdateTime);
+    this.lastUpdateTime = t;
+
     const { x: cx, y: cy } = controller.getChunkCoords();
 
     // 1. Always request the chunk the player is standing on first
@@ -83,30 +88,56 @@ export class ChunkManager {
     }
 
     // 3. Pulse wireframe opacity so loading chunks feel alive
-    const t = performance.now() / 1000;
     for (const wire of this.wireframes.values()) {
       const mat = wire.material as THREE.LineBasicMaterial;
       mat.opacity = WIRE_OPACITY + 0.2 * Math.sin(t * WIRE_PULSE_SPEED);
     }
 
-    // 4. Hysteresis zone management
+    // 4. Hysteresis zone management with smooth fade to avoid popping/seams
+    const FADE_SPEED = 6.0; // alpha units per second
     for (const [key, chunk] of this.chunks) {
       if (!chunk.splatMesh || chunk.loading) continue;
 
       const d = this.dist(chunk.x, chunk.y, cx, cy);
 
-      if (d <= ZONE_ACTIVE && chunk.zone !== "active") {
-        // Activate: make visible
-        chunk.splatMesh.visible = true;
-        chunk.zone = "active";
-      } else if (d > ZONE_ACTIVE && d <= ZONE_CACHED && chunk.zone !== "cached") {
-        // Cache: hide (saves draw calls), data stays in VRAM
-        chunk.splatMesh.visible = false;
-        chunk.zone = "cached";
-      } else if (d > ZONE_CACHED && chunk.zone !== "purged") {
+      if (d > ZONE_CACHED) {
         // Purge: free VRAM
         this.purgeChunk(key, chunk);
+        continue;
       }
+
+      // Desired alpha: 1 when active, 0 when cached
+      const desiredAlpha = d <= ZONE_ACTIVE ? 1 : 0;
+
+      // Ensure userData fade state exists on the splatMesh
+      const mesh: any = chunk.splatMesh as any;
+      if (mesh.userData.fade == null) mesh.userData.fade = 1;
+
+      // Smoothly approach desired alpha
+      if (mesh.userData.fade < desiredAlpha) {
+        mesh.userData.fade = Math.min(desiredAlpha, mesh.userData.fade + FADE_SPEED * dt);
+      } else if (mesh.userData.fade > desiredAlpha) {
+        mesh.userData.fade = Math.max(desiredAlpha, mesh.userData.fade - FADE_SPEED * dt);
+      }
+
+      // Apply opacity to all child materials
+      mesh.traverse((child: any) => {
+        if (child?.isMesh && child.material) {
+          const m: any = child.material;
+          if (typeof m.opacity === "number") {
+            m.opacity = mesh.userData.fade;
+            m.transparent = m.opacity < 1;
+            m.needsUpdate = true;
+          }
+        }
+      });
+
+      // Visibility: keep in scene while fading, hide only when fully transparent
+      mesh.visible = mesh.userData.fade > 0.001;
+
+      // Update zone state once settled
+      const newZone = mesh.userData.fade >= 0.999 ? "active" : mesh.userData.fade <= 0.001 ? "cached" : chunk.zone;
+      chunk.zone = newZone as any;
     }
   }
 
@@ -239,5 +270,16 @@ export class ChunkManager {
 
   getPendingCount(): number {
     return this.pendingLoads.size;
+  }
+
+  /** Return an array of loaded chunk coordinates for UI/debugging (minimap). */
+  getLoadedChunkCoords(): { x: number; y: number }[] {
+    const out: { x: number; y: number }[] = [];
+    for (const chunk of this.chunks.values()) {
+      if (chunk.splatMesh && chunk.zone !== "purged") {
+        out.push({ x: chunk.x, y: chunk.y });
+      }
+    }
+    return out;
   }
 }

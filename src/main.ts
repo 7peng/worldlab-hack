@@ -15,6 +15,8 @@ let chunkManager: ChunkManager;
 let gameLoopRunning = false;
 let animFrameId = 0;
 let initialized = false;
+let minimapCanvas: HTMLCanvasElement | null = null;
+let minimapCtx: CanvasRenderingContext2D | null = null;
 
 // ---------------------------------------------------------------------------
 // UI helpers
@@ -89,6 +91,54 @@ function updateHUD(dt: number) {
   ].join("<br>");
 }
 
+function updateMinimap() {
+  if (!minimapCanvas || !minimapCtx || !chunkManager || !controller) return;
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const size = Math.min(220, Math.max(120, Math.min(window.innerWidth, window.innerHeight) * 0.18));
+  minimapCanvas.style.width = `${size}px`;
+  minimapCanvas.style.height = `${size}px`;
+  minimapCanvas.width = Math.floor(size * dpr);
+  minimapCanvas.height = Math.floor(size * dpr);
+  minimapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Clear background
+  minimapCtx.fillStyle = "#000";
+  minimapCtx.fillRect(0, 0, size, size);
+
+  // Grid params
+  const radius = 6; // how many chunks from center to show
+  const gridSize = radius * 2 + 1;
+  const cell = size / gridSize;
+
+  // Center chunk is at middle
+  const centerX = Math.floor(gridSize / 2);
+  const centerY = Math.floor(gridSize / 2);
+
+  // Draw loaded chunks
+  const loaded = chunkManager.getLoadedChunkCoords();
+  const playerChunk = controller.getChunkCoords();
+
+  minimapCtx.fillStyle = "#fff";
+  for (const c of loaded) {
+    const dx = c.x - playerChunk.x;
+    const dy = c.y - playerChunk.y;
+    if (Math.abs(dx) > radius || Math.abs(dy) > radius) continue;
+    const sx = (centerX + dx) * cell;
+    const sy = (centerY + dy) * cell;
+    minimapCtx.fillRect(sx + 1, sy + 1, cell - 2, cell - 2);
+  }
+
+  // Draw player marker (red center)
+  minimapCtx.fillStyle = "#ff4444";
+  minimapCtx.fillRect(centerX * cell + cell * 0.25, centerY * cell + cell * 0.25, cell * 0.5, cell * 0.5);
+
+  // Draw border
+  minimapCtx.strokeStyle = "rgba(255,255,255,0.06)";
+  minimapCtx.lineWidth = 1;
+  minimapCtx.strokeRect(0.5, 0.5, size - 1, size - 1);
+}
+
 // ---------------------------------------------------------------------------
 // Game loop
 // ---------------------------------------------------------------------------
@@ -102,6 +152,7 @@ function gameLoop() {
   controller.update(dt);
   chunkManager.update(controller);
   updateHUD(dt);
+  updateMinimap();
 
   ctx.renderer.render(ctx.scene, ctx.camera);
 }
@@ -118,6 +169,10 @@ function start(prompt: string) {
     spark = createSpark(ctx.renderer, ctx.camera);
     controller = new FlyController(ctx.camera, ctx.canvas);
     chunkManager = new ChunkManager(ctx.scene, prompt);
+
+    // Minimap setup
+    minimapCanvas = document.getElementById("minimap") as HTMLCanvasElement;
+    minimapCtx = minimapCanvas.getContext("2d");
 
     setupContextRecovery(
       ctx,

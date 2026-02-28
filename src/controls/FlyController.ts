@@ -4,6 +4,7 @@ import {
   FLY_LOOK_SENSITIVITY,
   FLY_DAMPING,
   CHUNK_SIZE,
+  CAMERA_START_Y,
 } from "../utils/constants";
 
 /**
@@ -104,8 +105,8 @@ export class FlyController {
       );
 
       const accel = new THREE.Vector3();
+      // Ignore vertical input to restrict movement to XZ plane
       accel.addScaledVector(right, input.x);
-      accel.y += input.y;
       accel.addScaledVector(forward, input.z);
 
       this.velocity.addScaledVector(accel, this.moveSpeed * dt);
@@ -114,8 +115,13 @@ export class FlyController {
     // Damping
     this.velocity.multiplyScalar(this.damping);
 
-    // Integrate position
-    this.camera.position.addScaledVector(this.velocity, dt);
+    // Zero-out vertical velocity and integrate position only on XZ
+    this.velocity.y = 0;
+    const deltaPos = new THREE.Vector3().copy(this.velocity).multiplyScalar(dt);
+    this.camera.position.add(deltaPos);
+
+    // Prevent moving up/down: clamp camera Y
+    this.camera.position.y = CAMERA_START_Y;
 
     // Apply rotation
     const quat = new THREE.Quaternion();
